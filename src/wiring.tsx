@@ -1,30 +1,35 @@
 import { useId, useMemo, useState } from 'react';
 import { Cable as CableIcon, ChevronRight, Download, GitBranch, History, Layers3, Plus, Server, Trash2, TriangleAlert, Upload, X } from 'lucide-react';
-import { bindEndpoint, cableKinds, connectorGenders, defaultPlug, endpointReason, indexDevices, inspectEndpoint, matchingNetWires, resolvePickeringPins, wiringIssues } from '../wiring.mjs';
+import { autoLinkWires, bindEndpoint, cableKinds, connectorGenders, defaultPlug, draftCablesFromNets, endpointReason, indexDevices, inspectEndpoint, matchingNetWires, resolvePickeringPins, wiringIssues } from '../wiring.mjs';
 import { Modal } from './panels';
 import { ReceiverPanel } from './receivers';
+import { DrawingCanvas, type ConnectorInput } from './drawing';
 import { genderNames, pinNames } from './ports';
-import type { Cable, Definition, Device, Endpoint, Item, Net, Plug, Port, Project, SaveReceiverMounts, Wire, WiringGroup, WiringRevision } from './types';
+import type { Cable, Definition, Device, Drawing, Endpoint, Item, Net, Plug, Port, Project, SaveReceiverMounts, Wire, WiringGroup, WiringRevision } from './types';
 
-const labels:Record<string,string>={single:'단심',multicore:'다심',twisted:'트위스트 페어',coax:'동축'};
+const labels:Record<string,string>={single:'단심',multicore:'다심',twisted:'트위스트 페어',coax:'동축',loopback:'루프백'};
 const absent=(deviceId='',portId=''):Endpoint=>({deviceId,portId,display:'',fingerprint:''});
 const itemLabel=(item:Item)=>item.label||item.definition.part;
 const uid=()=>crypto.randomUUID();
 const api=window.studio;
 type Entity='groups'|'nets'|'cables'|'revisions';
 type Change={type:'save';entity:Entity;record:Cable|Net|WiringGroup|WiringRevision}|{type:'remove';entity:Entity;id:string};
-type Tab='cables'|'nets'|'groups'|'receivers'|'revisions';
-type Popup={kind:'cables'; row?:Cable; start?:Endpoint; end?:Endpoint} | {kind:'nets';row?:Net;start?:Endpoint} | {kind:'groups';row?:WiringGroup} | {kind:'revisions'} | null;
+type Tab='cables'|'nets'|'groups'|'receivers'|'revisions'|'harness';
+type Popup={kind:'cables'; row?:Cable; start?:Endpoint; end?:Endpoint} | {kind:'nets';row?:Net;start?:Endpoint} | {kind:'groups';row?:WiringGroup} | {kind:'revisions'} |
+  {kind:'drafts';cables:Cable[];skipped:string[]} | {kind:'bundle'} | null;
 
-export function WiringPage({project,catalog,device,review,onEdit,onAddReceiver,onMount,onOpenPart,notify,onExport}:{
+export function WiringPage({project,catalog,device,review,initialView,onEdit,onAddReceiver,onMount,onOpenPart,notify,onExport,onDrawing,onConnector,onDrafts,onBundle}:{
   project:Project;catalog:Definition[];device?:string;review?:string;
+  initialView?:'harness';
   onEdit:(action:Change)=>boolean;onAddReceiver:()=>void;onMount:SaveReceiverMounts;
+  onDrawing:(drawing:Drawing)=>boolean;onConnector:(value:ConnectorInput)=>{deviceId:string;portId:string}|null;onDrafts:(cables:Cable[])=>boolean;
+  onBundle:(ids:string[],bundle:string)=>boolean;
   onOpenPart:(id:string)=>void;notify:(message:string,error?:boolean)=>void;onExport:()=>void;
 }) {
   const w=project.wiring;
   const devices=useMemo(()=>indexDevices(project) as Map<string,Device>,[project]);
   const requested=w.cables.some(c=>c.id===review)?'cables':w.nets.some(n=>n.id===review)?'nets':w.groups.some(g=>g.id===review)?'groups':null;
-  const [tab,setTab]=useState<Tab>(requested||(devices.get(device)?.definition.kind==='receiver'?'receivers':'cables'));
+  const [tab,setTab]=useState<Tab>(requested||initialView||(devices.get(device)?.definition.kind==='receiver'?'receivers':'cables'));
   const [focus,setFocus]=useState(review||'');
   const [popup,setPopup]=useState<Popup>(null),[filter,setFilter]=useState(''),[busy,setBusy]=useState(false);
   const issues=useMemo(()=>wiringIssues(project),[project]);
@@ -59,15 +64,21 @@ export function WiringPage({project,catalog,device,review,onEdit,onAddReceiver,o
     <div className="page-heading"><div><h1>와이어링 설계</h1><p>구성품의 커넥터, 신호, 리시버 후면 접점을 연결합니다.</p></div><button className="btn" onClick={onExport}><Download size={16}/> 설계 출력</button></div>
     <div className="wire-views">
       {([
-        ['cables','케이블',CableIcon,w.cables.length],['receivers','리시버',Server,project.instruments.filter(d=>d.definition.kind==='receiver').length],
+        ['cables','케이블',CableIcon,w.cables.length],['harness','경로 도면',GitBranch,null],['receivers','리시버',Server,project.instruments.filter(d=>d.definition.kind==='receiver').length],
         ['nets','신호 연결',GitBranch,w.nets.length],['groups','서브시스템',Layers3,w.groups.length],['revisions','리비전 기록',History,w.revisions.length],
-      ] as const).map(([key,title,Icon,num])=><button className={tab===key?'active':''} key={key} onClick={()=>setTab(key)}><Icon size={16}/> {title} <span>{num}</span></button>)}
+      ] as const).map(([key,title,Icon,num])=><button className={tab===key?'active':''} key={key} onClick={()=>setTab(key)}><Icon size={16}/> {title} {num!==null&&<span>{num}</span>}</button>)}
     </div>
+    {tab==='harness'&&<DrawingCanvas project={project} mode="harness" onChange={onDrawing} onCreateConnector={onConnector}
+      onConnect={(a,b)=>setPopup({kind:'cables',start:bindEndpoint(devices,a.deviceId,a.portId),end:bindEndpoint(devices,b.deviceId,b.portId)})}
+      onOpen={id=>{const cable=w.cables.find(c=>c.id===id);if(cable)setPopup({kind:'cables',row:cable});else onOpenPart(id);}} notify={notify}/>}
     {tab==='receivers'&&<ReceiverPanel receivers={project.instruments.filter(d=>d.definition.kind==='receiver')} focus={device} catalog={catalog} onAdd={onAddReceiver} onMount={onMount} onCable={(id,port)=>{
       setTab('cables');setPopup({kind:'cables',end:bindEndpoint(devices,id,port) as Endpoint});
     }}/>}
     {tab==='cables'&&<>
-      <div className="wire-toolbar"><button className="btn primary" onClick={newCable}><Plus size={16}/> 케이블 추가</button><GroupSelect groups={w.groups} value={filter} onChange={v=>{setFilter(v);setFocus('');}} empty="모든 서브시스템"/></div>
+      <div className="wire-toolbar"><button className="btn primary" onClick={newCable}><Plus size={16}/> 케이블 추가</button>
+        <button className="btn" disabled={!w.nets.length} onClick={()=>setPopup({kind:'drafts',...draftCablesFromNets(project,filter)})}>신호에서 케이블 생성</button>
+        <button className="btn" disabled={w.cables.filter(withGroup).length<2} onClick={()=>setPopup({kind:'bundle'})}>케이블 묶기</button>
+        <GroupSelect groups={w.groups} value={filter} onChange={v=>{setFilter(v);setFocus('');}} empty="모든 서브시스템"/></div>
       {w.cables.filter(withGroup).length?<div className="wire-split">
         <div className="wire-list">{w.cables.filter(withGroup).map(c=>{
           const error=issues.some(i=>i.itemId===c.id&&i.severity==='error');
@@ -87,8 +98,8 @@ export function WiringPage({project,catalog,device,review,onEdit,onAddReceiver,o
           </tbody></table></div>
           {!current.wires.length&&<div className="empty-small">케이블 편집에서 양단 핀을 연결하세요.</div>}
           <div className="cdt-tools"><b>Pickering CDT 핀맵</b><div className="inline-actions">
-            <button className="btn compact" disabled={busy||!current.wires.length} onClick={()=>sendCsv('named')}><Download size={14}/> 핀맵 CSV</button>
-            <button className="btn compact" disabled={busy||!current.wires.length} onClick={()=>sendCsv('flying')}><Download size={14}/> 리시버 Flying Lead CSV</button>
+            <button className="btn compact" disabled={busy||!current.wires.length||current.kind==='loopback'} onClick={()=>sendCsv('named')}><Download size={14}/> 핀맵 CSV</button>
+            <button className="btn compact" disabled={busy||!current.wires.length||current.kind==='loopback'} onClick={()=>sendCsv('flying')}><Download size={14}/> 리시버 Flying Lead CSV</button>
           </div><small>CDT에서 먼저 양단과 경로를 만든 뒤 Link Pins에서 가져옵니다. 리시버용은 접점 ID를 우측 리드 이름에 보존합니다.</small></div>
         </article>}
       </div>:<div className="wire-empty"><CableIcon size={25}/><h3>등록된 케이블이 없습니다</h3><p>두 구성품의 커넥터를 선택하고 도체별 핀을 매핑하세요.</p></div>}
@@ -134,7 +145,27 @@ export function WiringPage({project,catalog,device,review,onEdit,onAddReceiver,o
       <GroupForm devices={devices} initial={popup.row} onSave={row=>save('groups',row)} onClose={close}/>
     </Modal>}
     {popup?.kind==='revisions'&&<Modal title="리비전 기록 추가" onClose={close}><RevisionForm project={project} onSave={row=>save('revisions',row)}/></Modal>}
+    {popup?.kind==='bundle'&&<Modal title="케이블 묶기" onClose={close}><BundleForm cables={w.cables.filter(withGroup)}
+      onSave={(ids,name)=>{if(onBundle(ids,name))close();}}/></Modal>}
+    {popup?.kind==='drafts'&&<Modal title="신호에서 케이블 생성" onClose={close} wide>
+      <div className="form">
+        {popup.cables.length?<ul>{popup.cables.map(c=><li key={c.id}>{c.code} · {c.name} · {c.wires.length}선</li>)}</ul>:<p className="muted">새로 연결할 두 점 신호가 없습니다.</p>}
+        {!!popup.skipped.length&&<p>별도 설계가 필요한 신호 {popup.skipped.length}개 · {popup.skipped.slice(0,12).join(', ')}</p>}
+        <p className="muted">빈 양단의 두 점 신호만 생성합니다. 케이블 품번, AWG와 길이는 각 경로에서 확인하세요.</p>
+        <div className="modal-actions"><button className="btn primary" disabled={!popup.cables.length} onClick={()=>{if(onDrafts(popup.cables)){setFocus(popup.cables[0].id);close();}}}>케이블 초안 적용</button></div>
+      </div>
+    </Modal>}
   </section>;
+}
+
+function BundleForm({cables,onSave}:{cables:Cable[];onSave:(ids:string[],name:string)=>void}){
+  const [name,setName]=useState(''),[ids,setIds]=useState<string[]>([]);
+  return <form className="form" onSubmit={e=>{e.preventDefault();onSave(ids,name);}}>
+    <label>하네스 ID<input required maxLength={100} value={name} onChange={e=>setName(e.target.value)}/></label>
+    {cables.map(c=><label className="check-row" key={c.id}><input type="checkbox" checked={ids.includes(c.id)}
+      onChange={e=>setIds(e.target.checked?[...ids,c.id]:ids.filter(x=>x!==c.id))}/>{c.code} · {c.name}</label>)}
+    <div className="modal-actions"><button className="btn primary" disabled={ids.length<2}>하네스로 묶기</button></div>
+  </form>;
 }
 
 function GroupSelect({groups,value,onChange,empty='서브시스템 없음'}:{groups:WiringGroup[];value:string;onChange:(v:string)=>void;empty?:string}) {
@@ -208,8 +239,12 @@ function CableForm({project,devices,initial,first,last,group,onSave,onClose}:{
   });
   const pinListId=useId();
   const [csvMode,setCsvMode]=useState('named');
+  const [autoMode,setAutoMode]=useState('id');
+  const [pinPicker,setPinPicker]=useState(false);
+  const [lengthUnit,setLengthUnit]=useState<'mm'|'cm'|'m'|'in'|'ft'>('mm');
   const [err,setErr]=useState(''),[imported,setImported]=useState<{name:string;rows:Wire[]}|null>(null);
   const a=portFor(devices,draft.a),b=portFor(devices,draft.b);
+  const unitFactor={mm:1,cm:10,m:1000,in:25.4,ft:304.8}[lengthUnit];
   function change(value:Partial<Cable>) {setDraft(d=>({...d,...value}));setErr('');}
   function endChange(side:'a'|'b',endpoint:Endpoint) {
     const mate=side==='a'?'plugA':'plugB';
@@ -241,9 +276,15 @@ function CableForm({project,devices,initial,first,last,group,onSave,onClose}:{
     const right=b?.pins.find(p=>p.kind!=='nc'&&!draft.wires.some(w=>w.b===p.id));
     change({wires:[...draft.wires,draftWire(left?.id,right?.id)]});
   }
+  function linkPins(){
+    const rows=autoLinkWires(a,b,autoMode,draft.wires);
+    if(!rows.length){setErr('자동 연결할 빈 핀이 없습니다.');return;}
+    change({wires:[...draft.wires,...rows]});
+  }
   const text=(key:keyof Cable,label:string,max=120)=><label>{label}<input value={String(draft[key]??'')} maxLength={max} onChange={e=>change({[key]:e.target.value})}/></label>;
   const num=(key:keyof Cable,label:string,max:number)=><label>{label}<input type="number" step="any" min="1" max={max} value={String(draft[key]??'')} onChange={e=>change({[key]:e.target.value?Number(e.target.value):undefined})}/></label>;
-  return <form className="form" onSubmit={e=>{e.preventDefault();if(!draft.a.fingerprint||!draft.b.fingerprint){setErr('양쪽 커넥터를 선택하세요.');return;}onSave(draft);}}>
+  return <form className="form" onSubmit={e=>{e.preventDefault();if(!draft.a.fingerprint||!draft.b.fingerprint){setErr('양쪽 커넥터를 선택하세요.');return;}
+    onSave(draft.kind==='loopback'?{...draft,plugB:draft.plugA}:draft);}}>
     <div className="form-grid">{text('code','케이블 번호',100)}{text('name','이름')}
       <label>서브시스템<GroupSelect groups={project.wiring.groups} value={draft.groupId} onChange={v=>change({groupId:v})}/></label>
       <label>종류<select value={draft.kind} onChange={e=>change({kind:e.target.value})}>{cableKinds.map(k=><option key={k} value={k}>{labels[k]}</option>)}</select></label>
@@ -254,13 +295,27 @@ function CableForm({project,devices,initial,first,last,group,onSave,onClose}:{
       <MateFields side="A측" port={a} plug={draft.plugA} onChange={v=>change({plugA:v})}/>
       <MateFields side="B측" port={b} plug={draft.plugB} onChange={v=>change({plugB:v})}/>
     </div>
-    <div className="form-grid">{num('lengthMm','길이 mm',10000000)}<label>길이 기준<select value={draft.measurement||'tip'} onChange={e=>change({measurement:e.target.value})}><option value="tip">끝단 간</option><option value="backshell">백셸 간</option><option value="cut">절단 길이</option></select></label>{num('awg','기본 AWG',50)}{text('cablePart','케이블 원재료 품번')}{text('bundle','하네스 ID',100)}{text('shield','실드 처리')}{text('sleeve','슬리브')}</div>
+    <div className="form-grid">
+      <label>길이<input type="number" min={1/unitFactor} max={10000000/unitFactor} step="any"
+        value={draft.lengthMm==null?'':Math.round(draft.lengthMm/unitFactor*1e7)/1e7}
+        onChange={e=>change({lengthMm:e.target.value?Math.round(Number(e.target.value)*unitFactor*1000)/1000:undefined})}/></label>
+      <label>길이 단위<select value={lengthUnit} onChange={e=>setLengthUnit(e.target.value as typeof lengthUnit)}>{['mm','cm','m','in','ft'].map(x=><option key={x}>{x}</option>)}</select></label>
+      <label>길이 기준<select value={draft.measurement||'tip'} onChange={e=>change({measurement:e.target.value})}><option value="tip">끝단 간</option><option value="backshell">백셸 간</option><option value="cut">절단 길이</option></select></label>
+      {num('awg','기본 AWG',50)}{text('cablePart','케이블 원재료 품번')}{text('bundle','하네스 ID',100)}{text('shield','실드 처리')}{text('sleeve','슬리브')}
+    </div>
     <div className="section-head"><h3>도체별 양단 핀맵</h3><div className="inline-actions">
       <select aria-label="CDT CSV 연결 유형" value={csvMode} onChange={e=>{setCsvMode(e.target.value);setImported(null);}}><option value="named">일반 CDT 핀 번호</option><option value="flying" disabled={!b?.receiver}>리시버 Flying Lead</option></select>
       <button className="btn compact" type="button" disabled={!a||!b} onClick={()=>void loadCsv()}><Upload size={14}/> CDT CSV 가져오기</button>
       <button className="btn compact" type="button" disabled={!a||!b} onClick={matching}>신호에서 채우기</button>
+      <select aria-label="자동 핀 연결 방식" value={autoMode} onChange={e=>setAutoMode(e.target.value)}>
+        <option value="id">같은 핀 ID</option><option value="sequence">빈 핀 순서대로</option><option value="reverse">B측 빈 핀 역순</option>
+      </select>
+      <button className="btn compact" type="button" disabled={!a||!b||draft.kind==='loopback'} onClick={linkPins}>자동 핀 연결</button>
+      <button className="btn compact" type="button" disabled={!a||!b} aria-expanded={pinPicker&&Boolean(a&&b)} onClick={()=>setPinPicker(v=>!v)}>핀 선택판</button>
       <button className="btn compact" type="button" disabled={!a||!b||draft.wires.length>=1024} onClick={addWire}><Plus size={14}/> 도체 추가</button></div>
     </div>
+    {pinPicker&&a&&b&&<PinPairPicker key={draft.a.deviceId+draft.a.portId+draft.b.deviceId+draft.b.portId}
+      a={a} b={b} wires={draft.wires} onAdd={(left,right)=>change({wires:[...draft.wires,draftWire(left,right)]})}/>}
     {imported&&<div className="import-wire-preview"><b>{imported.name} · {imported.rows.length}개 핀쌍</b><span>{imported.rows.slice(0,5).map(w=>w.a+' ↔ '+w.b).join(' · ')}</span>
       <div className="inline-actions"><button type="button" className="btn compact" onClick={()=>{change({wires:[...draft.wires,...imported.rows]});setImported(null);}}>기존 도체 뒤에 추가</button>
       <button type="button" className="btn compact" onClick={()=>{change({wires:imported.rows});setImported(null);}}>현재 핀맵 교체</button><button type="button" className="icon" aria-label="가져오기 취소" onClick={()=>setImported(null)}><X size={15}/></button></div>
@@ -285,6 +340,19 @@ function CableForm({project,devices,initial,first,last,group,onSave,onClose}:{
 }
 function PinSelect({title,list,value,change}:{title:string;list:string;value:string;change:(v:string)=>void}) {
   return <input aria-label={title} required list={list} maxLength={80} value={value} onChange={e=>change(e.target.value)}/>;
+}
+function PinPairPicker({a,b,wires,onAdd}:{a:Port;b:Port;wires:Wire[];onAdd:(a:string,b:string)=>void}){
+  const [left,setLeft]=useState(''),[right,setRight]=useState('');
+  const usedA=new Set(wires.map(w=>w.a)),usedB=new Set(wires.map(w=>w.b));
+  const pane=(port:Port,name:string,selected:string,used:Set<string>,select:(id:string)=>void)=>
+    <section><h4>{name} · {port.name||port.id}</h4><div className="pin-picker-grid">{port.pins.map(p=><button type="button" key={p.id}
+      aria-label={name+' 핀 '+p.id} title={p.label||p.id} aria-pressed={selected===p.id} disabled={p.kind==='nc'||used.has(p.id)}
+      onClick={()=>select(p.id)}>{p.id}</button>)}</div></section>;
+  return <div className="wire-card pin-picker">
+    <div className="form-grid">{pane(a,'A측',left,usedA,setLeft)}{pane(b,'B측',right,usedB,setRight)}</div>
+    <button type="button" className="btn compact primary" disabled={!left||!right||usedA.has(left)||usedB.has(right)||wires.length>=1024}
+      onClick={()=>{onAdd(left,right);setLeft('');setRight('');}}>선택 핀 쌍 연결</button>
+  </div>;
 }
 
 function MateFields({side,port,plug,onChange}:{side:string;port?:Port;plug:Plug;onChange:(v:Plug)=>void}) {

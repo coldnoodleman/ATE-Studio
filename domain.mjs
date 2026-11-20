@@ -1,6 +1,7 @@
-import { cleanConnectors, cleanWiring, emptyWiring, editWiring, wiringIssues, bindEndpoint, indexDevices, defaultPlug } from './wiring.mjs';
+import { bundleCables, cleanConnectors, cleanWiring, emptyWiring, editWiring, wiringIssues, bindEndpoint, indexDevices, defaultPlug } from './wiring.mjs';
 import { cleanReceiver, cleanReceiverModule, cleanReceiverMounts } from './receiver.mjs';
-export const VERSION = '0.6.0';
+import { cleanDrawing, cleanDrawings, drawingModes } from './drawing.mjs';
+export const VERSION = '0.7.0';
 export const kinds = ['chassis', 'module', 'instrument', 'dut', 'receiver', 'receiverModule'];
 export const interfaces = ['PXI', 'PXIe', 'Hybrid', 'LXI/USB', 'Standalone'];
 export const roles = ['system', 'peripheral', 'timing', 'reserved'];
@@ -86,7 +87,7 @@ export function cleanDefinition(input) {
 }
 
 export function createProject(name = '새 시험장비 구성') {
-  return { schema: 2, wiring:emptyWiring(), id: uid(), name, revision: 'A', notes: '', catalogVersion: '', updatedAt: new Date().toISOString(), chassis: [], instruments: [] };
+  return { schema: 2, wiring:emptyWiring(), drawings:cleanDrawings(), id: uid(), name, revision: 'A', notes: '', catalogVersion: '', updatedAt: new Date().toISOString(), chassis: [], instruments: [] };
 }
 
 export function cleanProject(input) {
@@ -106,7 +107,7 @@ export function cleanProject(input) {
   });
   const id = cleanId(input.id);
   const project = {
-    schema: 2, wiring:cleanWiring(input.wiring), id, name: str(input.name, '프로젝트 이름', 150),
+    schema: 2, wiring:cleanWiring(input.wiring), drawings:cleanDrawings(input.drawings), id, name: str(input.name, '프로젝트 이름', 150),
     revision: str(input.revision, '프로젝트 개정', 45), notes: str(input.notes ?? '', '프로젝트 메모', 6000, true),
     catalogVersion:str(input.catalogVersion ?? '', '카탈로그 버전', 100, true),
     updatedAt: str(input.updatedAt, '변경 시각', 45),
@@ -269,6 +270,11 @@ export function perform(project, operation) {
   } else if (operation.type==='wiring') {
     next.wiring=editWiring(project,operation.action);
     if(operation.action.type==='save'&&operation.action.entity==='revisions')next.revision=operation.action.record.name;
+  } else if(operation.type==='cableBundle'){
+    next.wiring=bundleCables(project,operation.ids,operation.bundle);
+  } else if(operation.type==='cableDrafts'){
+    checked(Array.isArray(operation.cables)&&operation.cables.length>0&&operation.cables.length<=1200,'적용할 케이블 초안을 선택하세요.');
+    for(const record of operation.cables)next.wiring=editWiring(next,{type:'save',entity:'cables',record});
   } else if (operation.type==='receiverMounts' || operation.type==='ports') {
     const item=[...next.chassis,...next.chassis.flatMap(x=>x.placements),...next.instruments].find(x=>x.id===targetId);
     checked(item,'배치된 구성품을 찾을 수 없습니다.');
@@ -279,6 +285,9 @@ export function perform(project, operation) {
       checked(item.definition.kind!=='receiver','리시버 포트는 장착 모듈에서 정의하세요.');
       item.definition={...item.definition,connectors:cleanConnectors(operation.connectors)};
     }
+  } else if(operation.type==='drawing'){
+    checked(drawingModes.includes(operation.mode),'도면 유형을 선택하세요.');
+    next.drawings={...cleanDrawings(next.drawings),[operation.mode]:cleanDrawing(operation.drawing)};
   } else if (operation.type === 'projectInfo') {
     next.name = operation.name; next.revision = operation.revision; next.notes = operation.notes;
   } else fail('지원되지 않는 편집 명령입니다.');

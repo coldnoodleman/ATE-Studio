@@ -1,5 +1,7 @@
 import { WiringPage } from './wiring';
 import { PortForm } from './ports';
+import { ProjectWorkspace } from './workspace';
+import { DrawingCanvas, type ConnectorInput } from './drawing';
 import { receiverMountWiringImpact, wiringImpact } from '../wiring.mjs';
 import { Fragment, useEffect, useMemo, useRef, useState, type FormEvent, type DragEvent } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -25,7 +27,8 @@ const roleBadge=(role:string, accepts:string[])=>role==='system'?'SYS':role==='t
 
 function App() {
   const [project,setProject]=useState<Project>(()=>createProject() as Project);
-  const [wireFocus,setWireFocus]=useState({id:'',review:'',version:0});
+  const workspaceLink=useRef<{id:string;generation:number}|null>(null);
+  const [wireFocus,setWireFocus]=useState<{id:string;review:string;version:number;initialView?:'harness'}>({id:'',review:'',version:0});
   const [file,setFile]=useState<FileState>(noFile);
   const [dirty,setDirty]=useState(false);
   const [catalog,setCatalog]=useState<Definition[]>([]);
@@ -89,6 +92,7 @@ function App() {
   }
 
   function newState(p:Project,f:FileState,recovered=false) {
+    workspaceLink.current=null;
     projectRef.current=p;
     setProject(p);setFile(f);setDirty(recovered);setPast([]);setFuture([]);setReply(null);setLastAuto(null);setAiError('');
     lastAutoVersion.current='';
@@ -136,8 +140,27 @@ function App() {
 
   function save(as=false) {
     return task(async()=>{
+      const linked=workspaceLink.current;
+      if(linked&&!as){
+        await api.workspaceEdit({type:'designSave',designId:linked.id,generation:linked.generation,project:projectRef.current});
+        workspaceLink.current={...linked,generation:linked.generation+1};
+        setFile({name:projectRef.current.name,readOnly:false});setDirty(false);
+        notify('작업공간에 설계를 저장했습니다.');
+        return;
+      }
       const result=await api.save(projectRef.current,as||file.readOnly);
-      if(result) {setFile(result.file);setDirty(false);notify(result.file.name+' 저장 완료');}
+      if(result) {workspaceLink.current=null;setFile(result.file);setDirty(false);notify(result.file.name+' 저장 완료');}
+    });
+  }
+  function openWorkspaceDesign(designId:string,revisionId?:string){
+    if(dirty&&!window.confirm('현재 편집 내용을 닫고 작업공간 설계를 열까요?'))return;
+    void task(async()=>{
+      const result=await api.workspaceOpen(designId,revisionId);
+      newState(result.project,{name:result.name,readOnly:result.readOnly});
+      if(!result.readOnly)workspaceLink.current={id:result.designId,generation:result.generation};
+      if(result.kind==='cable')openWiring('','','harness');
+      if(result.kind==='schematic')setTab('schematic');
+      if(result.readOnly)notify('읽기 전용으로 열었습니다. 변경 사항은 별도 파일로 저장할 수 있습니다.');
     });
   }
   function changeProject(open:boolean,sample:boolean|'wiring'=false) {
@@ -205,8 +228,16 @@ function App() {
     setSelection({chassisId:c.id,slot:n,itemId:item?.id});setSide('detail');
     if(open&&!item) openCatalog({kind:'module',chassisId:c.id,slot:n});
   }
-  function openWiring(id='',review='') {
-    setWireFocus(w=>({id,review,version:w.version+1}));setTab('wiring');
+  function openWiring(id='',review='',initialView?:'harness') {
+    setWireFocus(w=>({id,review,initialView,version:w.version+1}));setTab('wiring');
+  }
+  function addDrawingConnector(value:ConnectorInput){
+    const id=crypto.randomUUID();
+    const definition={kind:'instrument',vendor:'사용자 정의',part:value.part||'LOCAL-'+id.slice(0,8),
+      name:value.name,revision:'1',standard:'Standalone',category:value.flying?'Flying Lead':'커넥터',evidence:'unverified',procure:false,
+      connectors:[{id:'J1',name:value.name,family:value.family,gender:value.gender,part:value.part,
+        pins:value.pins.map(pin=>({id:pin,kind:'passive'}))}]};
+    return run({type:'addInstrument',newId:id,definition,label:value.name})?{deviceId:id,portId:'J1'}:null;
   }
   function noteImpact(ids:string[]) {
     const impact=wiringImpact(projectRef.current,ids);
@@ -359,7 +390,10 @@ function App() {
 
       <main className="main-area">
         <div className="tabs">
+          <button className={tab==='workspace'?'active':''} onClick={()=>setTab('workspace')}><Folder size={17}/> 프로젝트 관리자</button>
           <button className={tab==='layout'?'active':''} onClick={()=>setTab('layout')}><LayoutGrid size={17}/> 배치 편집</button>
+          <button className={tab==='systemDrawing'?'active':''} onClick={()=>setTab('systemDrawing')}><LayoutGrid size={17}/> 시스템 도면</button>
+          <button className={tab==='schematic'?'active':''} onClick={()=>setTab('schematic')}><Cable size={17}/> 신호 결선도</button>
           <button className={tab==='catalog'?'active':''} onClick={()=>setTab('catalog')}><Boxes size={17}/> 장비 라이브러리</button>
           <button className={tab==='bom'?'active':''} onClick={()=>setTab('bom')}><ClipboardList size={17}/> 부품명세서</button>
           <button className={tab==='wiring'?'active':''} onClick={()=>openWiring()}><Cable size={17}/> 와이어링</button>
@@ -441,8 +475,17 @@ function App() {
             <div className="issue-list">{visibleIssues.length?visibleIssues.map((i,j)=><button key={j} className={'issue '+i.severity} onClick={()=>navigateIssue(i.itemId)}><TriangleAlert size={14}/><span>{i.message}</span><ChevronRight size={14}/></button>):<p className="muted">표시할 검토 항목이 없습니다.</p>}</div>
           </div>}
         </>}
+        {tab==='workspace'&&<ProjectWorkspace project={project} onOpen={openWorkspaceDesign} notify={notify}/>}
+        {(tab==='systemDrawing'||tab==='schematic')&&<section className="data-page">
+          <DrawingCanvas key={project.id+':'+tab} project={project} mode={tab==='systemDrawing'?'system':'schematic'}
+            onChange={drawing=>Boolean(run({type:'drawing',mode:tab==='systemDrawing'?'system':'schematic',drawing}))}
+            onOpen={navigateIssue} notify={notify}/>
+        </section>}
         {tab==='wiring'&&<WiringPage key={project.id+':'+wireFocus.version} project={project} catalog={catalog}
-          device={wireFocus.id} review={wireFocus.review} onEdit={action=>Boolean(run({type:'wiring',action}))}
+          device={wireFocus.id} review={wireFocus.review} initialView={wireFocus.initialView} onEdit={action=>Boolean(run({type:'wiring',action}))}
+          onDrawing={drawing=>Boolean(run({type:'drawing',mode:'harness',drawing}))} onConnector={addDrawingConnector}
+          onDrafts={cables=>Boolean(run({type:'cableDrafts',cables}))}
+          onBundle={(ids,bundle)=>Boolean(run({type:'cableBundle',ids,bundle}))}
           onAddReceiver={()=>openCatalog({kind:'receiver'})} onMount={saveReceiverMounts}
           onOpenPart={navigateIssue} notify={notify} onExport={()=>{setFormal(false);setPopup('export');}}/>}
         {tab==='catalog'&&<section className="data-page">
@@ -519,7 +562,7 @@ function App() {
     {popup==='export'&&<Modal title="설계 내보내기" onClose={close}>
       <div className="form"><label className="check-row"><input type="checkbox" checked={formal} onChange={e=>setFormal(e.target.checked)}/> 검토본으로 발행</label>
       <p className="muted">{formal?'오류와 확인 필요 항목을 모두 해소해야 합니다.':'초안에는 배치 검토 항목이 포함됩니다.'}</p>
-      <div className="export-options">{[['pdf','배치도 PDF'],['png','배치도 PNG'],['xlsx','부품명세서 XLSX']].map(([format,name])=><button key={format} className="btn" disabled={pending} onClick={()=>exportFile(format)}>{format==='xlsx'?<FileSpreadsheet size={18}/>:<Download size={18}/>} {name}</button>)}</div></div>
+      <div className="export-options">{[['pdf','배치도 PDF'],['png','배치도 PNG'],['xlsx','부품명세서 XLSX'],['csv','부품명세서 CSV']].map(([format,name])=><button key={format} className="btn" disabled={pending} onClick={()=>exportFile(format)}>{format==='xlsx'?<FileSpreadsheet size={18}/>:<Download size={18}/>} {name}</button>)}</div></div>
     </Modal>}
     {popup==='move'&&selectedCard&&<Modal title="카드 이동" onClose={close}><MoveForm project={project} current={selectedCh.id} cardId={selectedCard.id} onMove={(chassisId,slot)=>{
       if(run({type:'move',id:selectedCard.id,chassisId,slot})){setSelection({chassisId,slot,itemId:selectedCard.id});close();}

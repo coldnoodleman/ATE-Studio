@@ -1,7 +1,7 @@
 import { emptyWiring, indexDevices, inspectEndpoint, endpointReason, wiringIssues } from './wiring.mjs';
 
 const term=(m)=>[m.part,m.termination,m.backshell].filter(Boolean).join(' · ');
-const kindLabels={single:'단심',multicore:'다심',twisted:'트위스트 페어',coax:'동축'};
+const kindLabels={single:'단심',multicore:'다심',twisted:'트위스트 페어',coax:'동축',loopback:'루프백'};
 const measureLabels={tip:'끝단 간',backshell:'백셸 간',cut:'절단 길이'};
 export function wiringReport(project) {
   const devices=indexDevices(project),w=project.wiring??emptyWiring();
@@ -52,6 +52,7 @@ export function wiringReport(project) {
       if(r){
         if(r.termination==='crimp')for(const row of c.rows)material('리시버 접점',ref===c.a?row.aContact:row.bContact,1,'개');
       }else{
+        if(c.kind==='loopback'&&ref===c.b)continue;
         const key=JSON.stringify([c.bundle,ref.deviceId,ref.portId,mate.part,mate.backshell]);
         if(!c.bundle||!shared.has(key)){
           material('케이블 커넥터',mate.part,1,'개');material('백셸',mate.backshell,1,'개');shared.add(key);

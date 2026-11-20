@@ -22,7 +22,7 @@ for studio_platform in win32 linux; do
   rm -f "$studio_dir/resources/default_app.asar"
   studio_app="$studio_dir/resources/app"
   mkdir -p "$studio_app/node_modules" "$studio_dir/third-party"
-  cp "$studio_root"/{main.mjs,preload.cjs,domain.mjs,catalog.mjs,csv.mjs,wiring.mjs,wiring-sample.mjs,wiring-report.mjs,receiver.mjs,receiver-catalog.mjs,pickering-catalog.mjs,llm.mjs,store.mjs,report.mjs,selftest.mjs,package.json} "$studio_app/"
+  cp "$studio_root"/{main.mjs,preload.cjs,domain.mjs,catalog.mjs,csv.mjs,drawing.mjs,wiring.mjs,wiring-sample.mjs,wiring-report.mjs,receiver.mjs,receiver-catalog.mjs,pickering-catalog.mjs,llm.mjs,store.mjs,workspace.mjs,report.mjs,selftest.mjs,package.json} "$studio_app/"
   cp -a "$studio_root/dist" "$studio_app/"
   cp -a "$studio_root/node_modules/fflate" "$studio_app/node_modules/"
   cp "$studio_root/README.md" "$studio_dir/"

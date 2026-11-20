@@ -6,6 +6,13 @@ const call = async (name, data) => {
 };
 contextBridge.exposeInMainWorld('studio',{
   boot:()=>call('boot'),
+  workspaceIndex:()=>call('workspace:index'),
+  workspaceEdit:operation=>call('workspace:edit',operation),
+  workspaceOpen:(designId,revisionId)=>call('workspace:open',{designId,revisionId}),
+  workspaceTransfer:(direction,folderId)=>call('workspace:transfer',{direction,folderId}),
+  workspaceAttachment:(direction,folderId,attachmentId,note)=>call('workspace:attachment',{direction,folderId,attachmentId,note}),
+  workspaceRfq:designId=>call('workspace:rfq',{designId}),
+  exportDrawing:(project,mode)=>call('drawing:export',{project,mode}),
   newProject:sample=>call('project:new',{sample}),
   openProject:()=>call('project:open'),
   save:(project,as)=>call('project:save',{project,as}),

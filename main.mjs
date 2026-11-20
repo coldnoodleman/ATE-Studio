@@ -3,12 +3,16 @@ import { sampleWiring } from './wiring-sample.mjs';
 import { app, BrowserWindow, dialog, ipcMain, protocol, session, safeStorage } from 'electron';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { zipSync } from 'fflate';
 import { mkdir, readFile, rm } from 'node:fs/promises';
 import { createHash, randomUUID } from 'node:crypto';
-import { createProject, cleanProject, cleanDefinition, projectIssues, perform, sampleProject } from './domain.mjs';
+import { buildBOM, createProject, cleanProject, cleanDefinition, projectIssues, perform, sampleProject } from './domain.mjs';
+import { csvRows } from './csv.mjs';
+import { exportDrawingSvg } from './drawing.mjs';
 import { catalogCsvTemplate, loadCatalogCsv, planCatalogImport, seedCatalog } from './catalog.mjs';
 import { store, readBounded, atomicWrite, writeProject, loadProject, acquire } from './store.mjs';
 import { makeReport, makeXlsx } from './report.mjs';
+import { editWorkspace, emptyWorkspace, exportWorkspaceFolder, findDesign, importWorkspaceFolder, MAX_ATTACHMENT, MAX_WORKSPACE, workspaceIndex } from './workspace.mjs';
 import { cleanLLM, defaultLLM, llmRequest, fingerprint, makeContext, interpretReply } from './llm.mjs';
 
 const root=path.dirname(fileURLToPath(import.meta.url));
@@ -108,6 +112,13 @@ function checkedStatus(project, formal) {
   return formal?'검토본':'초안';
 }
 
+function makeBomCsv(project) {
+  const safe=value=>typeof value==='string'&&/^[\s]*[=+@-]/.test(value)?"'"+value:value;
+  const rows=[['제조사','품번','품명','개정','분류','수량','조달','위치'],
+    ...buildBOM(project).map(row=>[row.vendor,row.part,row.name,row.revision,row.category,row.quantity,row.procurement?'예':'아니오',row.locations.join(' / ')])];
+  return Buffer.from('\ufeff'+csvRows(rows.map(row=>row.map(safe))),'utf8');
+}
+
 async function renderExport(project,format,status) {
   const catalogVersion=project.catalogVersion || '미기록';
   if (format==='xlsx') return makeXlsx(project,status,catalogVersion);
@@ -132,6 +143,90 @@ async function renderExport(project,format,status) {
 }
 
 function registry() {
+  bind('drawing:export',({project,mode})=>serialized(async()=>{
+    const p=cleanProject(project), svg=exportDrawingSvg(p,mode);
+    const pick=await dialog.showSaveDialog(window,{defaultPath:safeName(p.name)+'_'+mode+'.svg',filters:[{name:'SVG 도면',extensions:['svg']}]});
+    if(pick.canceled)return null;
+    await atomicWrite(pick.filePath,Buffer.from(svg,'utf8'));
+    return {name:path.basename(pick.filePath)};
+  }));
+  const workspace=()=>db.get('workspace')??emptyWorkspace();
+  const commitWorkspace=next=>{
+    if(Buffer.byteLength(JSON.stringify(next))>MAX_WORKSPACE)throw new Error('작업공간 저장 용량을 초과했습니다. 프로젝트를 내보내고 정리하세요.');
+    db.put('workspace',next);
+    return workspaceIndex(next);
+  };
+  bind('workspace:index',()=>serialized(async()=>workspaceIndex(workspace())));
+  bind('workspace:edit',op=>serialized(async()=>{
+    const next=editWorkspace(workspace(),op);
+    const result=commitWorkspace(next);
+    if(op.type==='designSave'){
+      dirty=false;
+      await rm(recoveryFile,{force:true}).catch(()=>{});
+    }
+    return result;
+  }));
+  bind('workspace:open',({designId,revisionId})=>serialized(async()=>{
+    const {design}=findDesign(workspace(),designId);
+    const revision=revisionId&&design.revisions.find(r=>r.id===revisionId);
+    if(revisionId&&!revision)throw new Error('리비전을 찾을 수 없습니다.');
+    await freeFile();dirty=false;
+    await rm(recoveryFile,{force:true});
+    return {project:revision?.project??design.project,readOnly:Boolean(revision||design.locked),
+      designId:design.id,kind:design.kind,generation:design.generation,name:design.name};
+  }));
+  bind('workspace:transfer',({direction,folderId})=>serialized(async()=>{
+    const filters=[{name:'ATE 작업공간',extensions:['ateworkspace','json']}];
+    if(direction==='import'){
+      const selected=await dialog.showOpenDialog(window,{properties:['openFile'],filters});
+      if(selected.canceled)return null;
+      const packet=JSON.parse((await readBounded(selected.filePaths[0],MAX_WORKSPACE)).toString('utf8'));
+      return commitWorkspace(importWorkspaceFolder(workspace(),packet));
+    }
+    if(direction!=='export')throw new Error('작업공간 반입 또는 반출을 선택하세요.');
+    const packet=exportWorkspaceFolder(workspace(),folderId);
+    const selected=await dialog.showSaveDialog(window,{defaultPath:safeName(packet.folder.name)+'.ateworkspace',filters});
+    if(selected.canceled)return null;
+    await atomicWrite(selected.filePath,Buffer.from(JSON.stringify(packet)));
+    return {name:path.basename(selected.filePath)};
+  }));
+  bind('workspace:attachment',({direction,folderId,attachmentId,note})=>serialized(async()=>{
+    const current=workspace();
+    if(direction==='add'){
+      const selected=await dialog.showOpenDialog(window,{properties:['openFile']});
+      if(selected.canceled)return null;
+      const filename=selected.filePaths[0];
+      const data=(await readBounded(filename,MAX_ATTACHMENT)).toString('base64');
+      return commitWorkspace(editWorkspace(current,{type:'attachmentAdd',folderId,attachment:{name:path.basename(filename),data,note}}));
+    }
+    if(direction!=='save')throw new Error('첨부 반입 또는 저장을 선택하세요.');
+    const row=exportWorkspaceFolder(current,folderId).folder.attachments.find(item=>item.id===attachmentId);
+    if(!row)throw new Error('첨부 파일을 찾을 수 없습니다.');
+    const selected=await dialog.showSaveDialog(window,{defaultPath:safeName(row.name)});
+    if(selected.canceled)return null;
+    await atomicWrite(selected.filePath,Buffer.from(row.data,'base64'));
+    return {name:path.basename(selected.filePath)};
+  }));
+  bind('workspace:rfq',({designId})=>serialized(async()=>{
+    const {folder,design}=findDesign(workspace(),designId);
+    const p=cleanProject(design.project);
+    const status=checkedStatus(p,false);
+    const selected=await dialog.showSaveDialog(window,{defaultPath:safeName(design.name)+'_RFQ.zip',
+      filters:[{name:'공급사 검토 패키지',extensions:['zip']}]});
+    if(selected.canceled)return null;
+    const mode=design.kind==='cable'?'harness':design.kind;
+    const files={
+      'design.ateproj':Buffer.from(JSON.stringify(p,null,2)),
+      'design.pdf':new Uint8Array(await renderExport(p,'pdf',status)),
+      'design.svg':Buffer.from(exportDrawingSvg(p,mode)),
+      'BOM.csv':makeBomCsv(p),
+      'wiring.xlsx':makeXlsx(p,status,p.catalogVersion||'미기록'),
+      'request.json':Buffer.from(JSON.stringify({project:folder.name,customer:folder.customer,design:design.name,
+        description:design.description,status,issues:projectIssues(p)},null,2)),
+    };
+    await atomicWrite(selected.filePath,zipSync(files,{level:4}));
+    return {name:path.basename(selected.filePath)};
+  }));
   bind('boot',()=>serialized(async()=>({catalog:db.list(),catalogVersion:db.get('catalogVersion'),settings:getLLM(),recovery:(await loadProject(recoveryFile).catch(()=>null))?.project??null})));
   bind('project:new',({sample}={})=>serialized(async()=>{
     await freeFile(); dirty=false; await rm(recoveryFile,{force:true});
@@ -170,14 +265,14 @@ function registry() {
   }));
   bind('project:discardRecovery',()=>serialized(async()=>{ dirty=false; await rm(recoveryFile,{force:true}); }));
   bind('project:export',({project,format,formal})=>serialized(async()=>{
-    if (!['pdf','png','xlsx'].includes(format)) throw new Error('지원되지 않는 출력 형식입니다.');
+    if (!['pdf','png','xlsx','csv'].includes(format)) throw new Error('지원되지 않는 출력 형식입니다.');
     project=cleanProject(project);
     const status=checkedStatus(project,formal);
     const suffix=formal?'_review':'_draft';
     const pick=await dialog.showSaveDialog(window,{defaultPath:safeName(project.name)+suffix+'.'+format,filters:[{name:format.toUpperCase(),extensions:[format]}]});
     if (pick.canceled) return null;
     const dest=pick.filePath.toLowerCase().endsWith('.'+format)?pick.filePath:pick.filePath+'.'+format;
-    await atomicWrite(dest,await renderExport(project,format,status));
+    await atomicWrite(dest,format==='csv'?makeBomCsv(project):await renderExport(project,format,status));
     return {name:path.basename(dest)};
   }));
   bind('wiring:readCsv',()=>serialized(async()=>{

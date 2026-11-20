@@ -1,4 +1,12 @@
-# ATE Studio v0.6.0
+# ATE Studio v0.7.0
+
+## 프로젝트와 도면
+
+- 로컬 프로젝트 관리, 설계 복제·이동·반영, 템플릿, 잠금, 리비전, 첨부와 검토·질의
+- 시스템 구성도, 신호 결선도, 케이블 경로 도면, 분기점과 경유점, 사용자 커넥터와 Flying Lead
+- 핀 선택판, 자동 핀 연결, 신호 기반 케이블 초안, 루프백, 케이블 묶기, 길이 단위 변환
+- 작업공간 공유 파일, 견적 검토 ZIP, SVG 도면, BOM CSV
+- [TSA 화면별 기능 대조](https://github.com/coldnoodleman/ATE-Studio/blob/main/docs/TSA-FEATURES.md)
 
 ## 폐쇄망용 포터블
 

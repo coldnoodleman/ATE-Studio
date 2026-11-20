@@ -1,4 +1,5 @@
 import { wiringReport } from './wiring-report.mjs';
+import { exportDrawingSvg } from './drawing.mjs';
 import { buildBOM, occupied, projectIssues, labelOf } from './domain.mjs';
 import { zipSync, strToU8 } from 'fflate';
 
@@ -100,9 +101,11 @@ export function makeReport(project,status,catalogVersion,mode='pdf') {
   return `<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>ATE Studio 배치도</title><style>
   @font-face{font-family:Studio;src:url('/fonts/NotoSansCJKkr-Regular.woff2') format('woff2');font-display:block}
   *{box-sizing:border-box}body{font:14px Studio,sans-serif;color:#182a38;background:white;margin:0;padding:32px}h1{font-size:27px;margin:8px 0}h2{font-size:17px;margin:0 0 10px}p{margin:6px 0}small{font-size:10px}em{font-style:normal;font-size:12px;color:#465c6c}header{border-bottom:2px solid #1d3949;padding-bottom:14px;margin-bottom:18px}strong{color:#087468}article{margin:0 0 22px}.slots{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:5px;margin:0 0 8px;break-inside:avoid}.slot{background:#eef3f5;border:1px solid #cad7df;padding:6px;min-width:0;min-height:62px;overflow-wrap:anywhere}.slot small{margin-left:5px;color:#435560}.slot div{font-size:10px;margin-top:7px}.loaded{background:#d9f1eb;border-color:#76aa9f}table{width:100%;border-collapse:collapse;font-size:11px;table-layout:fixed}th,td{padding:6px 7px;border:1px solid #dbe3e8;text-align:left;overflow-wrap:anywhere}th{background:#edf2f4}tr{break-inside:avoid}th:nth-child(3){width:43%}.cable-ends{display:grid;grid-template-columns:1fr 1fr;gap:7px}.cable-ends span{padding:7px;background:#edf5f4;overflow-wrap:anywhere}.notes{white-space:pre-wrap;overflow-wrap:anywhere}.issues{columns:1}li{margin-bottom:4px}h2{break-after:avoid}header{break-inside:avoid}@page{size:A4;margin:15mm}@media print{body{padding:0}} ${mode==='png'?'body{width:1120px}':''}
+  .route-figure{break-inside:avoid}.route-figure svg{display:block;max-width:100%;max-height:150mm;width:auto;height:auto}
   </style></head><body><header><strong>ATE STUDIO · 구성 배치도</strong><h1>${x(project.name)}</h1><p>프로젝트 개정 ${x(project.revision)} · ${x(status)} · 섀시 ${project.chassis.length}대</p><p>카탈로그 ${x(catalogVersion)}</p></header>
   ${project.chassis.map(chassisBlock).join('') || '<p>등록된 섀시가 없습니다.</p>'}
   ${project.instruments.length?`<article><h2>독립 장비 / DUT</h2><ul>${project.instruments.map(d=>`<li>${x(labelOf(d))} · ${x(d.definition.vendor)} · ${x(d.definition.part)} · ${procurement(d.procurement)}</li>`).join('')}</ul></article>`:''}
+  ${mode==='pdf'&&project.wiring?.cables?.length?`<article class="route-figure"><h2>케이블 경로 도면</h2>${exportDrawingSvg(project,'harness')}</article>`:''}
   ${wiringBlock(project,mode)}
   ${project.notes?`<article><h2>프로젝트 메모</h2><p class="notes">${x(project.notes)}</p></article>`:''}
   ${issues.length?`<article><h2>검토 항목</h2><ul class="issues">${issues.slice(0,mode==='png'?150:5000).map(i=>`<li>${i.severity==='error'?'오류':i.severity==='warning'?'확인':'참고'} · ${x(i.message)}</li>`).join('')}${mode==='png'&&issues.length>150?`<li>전체 항목은 PDF 또는 XLSX에서 확인하세요.</li>`:''}</ul></article>`:''}</body></html>`;

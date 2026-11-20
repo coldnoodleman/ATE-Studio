@@ -3,7 +3,7 @@ import { receiverPorts } from './receiver.mjs';
 
 export const connectorGenders = ['male','female','neutral','unknown'];
 export const pinKinds = ['passive','in','out','io','power','ground','shield','nc'];
-export const cableKinds = ['single','multicore','twisted','coax'];
+export const cableKinds = ['single','multicore','twisted','coax','loopback'];
 export const emptyWiring = () => ({groups:[],nets:[],cables:[],revisions:[]});
 const uuid = () => globalThis.crypto.randomUUID();
 
@@ -220,11 +220,15 @@ export function wiringIssues(project) {
   for(const cable of wiring.cables) {
     const {a,b}=cable;
     checkGroup(cable,[a,b]);
-    if(portKey(a)===portKey(b))push(cable,'error','wiring-self','케이블 양 끝이 동일한 커넥터입니다.');
+    const samePort=portKey(a)===portKey(b), loopback=cable.kind==='loopback';
+    if(samePort&&!loopback)push(cable,'error','wiring-self','케이블 양 끝이 동일한 커넥터입니다.');
+    if(loopback&&!samePort)push(cable,'error','wiring-loopback','루프백은 같은 커넥터의 서로 다른 핀을 연결합니다.');
+    if(loopback&&samePort&&JSON.stringify(cable.plugA)!==JSON.stringify(cable.plugB))
+      push(cable,'error','wiring-loopback-mate','루프백의 양쪽에 동일한 케이블 커넥터를 사용하세요.');
     const ends=[resolve(cable,a,'A측'),resolve(cable,b,'B측')];
     for(const [i,ref] of [a,b].entries()) {
       const mate=[cable.plugA,cable.plugB][i], result=ends[i], side=i?'B측':'A측';
-      if(result.status==='ok')pairs(portsInUse,portKey(ref),{cable,mate,side});
+      if(result.status==='ok'&&(!loopback||!samePort||i===0))pairs(portsInUse,portKey(ref),{cable,mate,side});
       const receiver=result.port?.receiver;
       if(receiver&&mate.termination!==receiver.termination)push(cable,'error','wiring-termination',`${side}에 ${receiver.termination} 후면 종단을 지정하세요.`);
       if(receiver&&receiver.contactPart&&mate.part!==receiver.contactPart)push(cable,'error','wiring-contact',`${side} 케이블 종단과 리시버 접점 품번이 다릅니다.`);
@@ -239,6 +243,7 @@ export function wiringIssues(project) {
     const rightPins=new Map(ends[1].port?.pins.map(p=>[p.id,p]));
     const pairGroups=new Map();
     for(const w of cable.wires) {
+      if(loopback&&samePort&&w.a===w.b)push(cable,'error','wiring-loopback-pin','루프백으로 같은 핀을 다시 연결할 수 없습니다.');
       if(w.pair)pairs(pairGroups,w.pair,w);
       const aPin=leftPins.get(w.a), bPin=rightPins.get(w.b);
       if(ends[0].port&&!aPin)push(cable,'error','wiring-pin',`A측 핀 ${w.a}가 없습니다.`);
@@ -318,6 +323,10 @@ export function editWiring(project,action) {
     if(at<0)value[name].push(row);
     else value[name][at]=row;
   } else throw new Error('지원되는 배선 편집을 선택하세요.');
+  return validateWiringEdit(project,value);
+}
+
+function validateWiringEdit(project,value) {
   const wiring=cleanWiring(value);
   const issues=wiringIssues({...project,wiring});
   const errors=issues.filter(x=>x.severity==='error');
@@ -327,6 +336,14 @@ export function editWiring(project,action) {
     assert(!blocking,blocking?.message);
   }
   return wiring;
+}
+
+export function bundleCables(project,ids,name){
+  assert(Array.isArray(ids)&&ids.length>=2,'묶을 케이블을 두 개 이상 선택하세요.');
+  const selected=new Set(ids), bundle=string(name,'하네스 ID',100,true);
+  const cables=project.wiring.cables.map(c=>selected.has(c.id)?{...c,bundle}:c);
+  assert(project.wiring.cables.filter(c=>selected.has(c.id)).length===selected.size&&selected.size>=2,'묶을 케이블을 확인하세요.');
+  return validateWiringEdit(project,{...project.wiring,cables});
 }
 
 export function matchingNetWires(project,cable) {
@@ -340,6 +357,58 @@ export function matchingNetWires(project,cable) {
     }
   }
   return wires;
+}
+
+export function autoLinkWires(a,b,mode,existing=[]) {
+  assert(a&&b,'케이블 양단을 먼저 선택하세요.');
+  assert(['id','sequence','reverse'].includes(mode),'자동 연결 방식을 선택하세요.');
+  const usedA=new Set(existing.map(w=>w.a)), usedB=new Set(existing.map(w=>w.b));
+  const left=a.pins.filter(p=>p.kind!=='nc'&&!usedA.has(p.id));
+  const right=b.pins.filter(p=>p.kind!=='nc'&&!usedB.has(p.id));
+  if(mode==='reverse')right.reverse();
+  const lookup=new Map(right.map(p=>[p.id,p]));
+  return left.flatMap((p,i)=>{
+    const mate=mode==='id'?lookup.get(p.id):right[i];
+    return mate?[{id:uuid(),a:p.id,b:mate.id,aLabel:p.label,bLabel:mate.label}]:[];
+  }).slice(0,Math.max(0,1024-existing.length));
+}
+
+export function draftCablesFromNets(project,groupId='') {
+  const devices=indexDevices(project), groups=new Map();
+  const reserved=new Set(project.wiring.cables.flatMap(c=>[portKey(c.a),portKey(c.b)]));
+  const codes=new Set(project.wiring.cables.map(c=>c.code.toLowerCase()));
+  const skipped=[];
+  for(const net of project.wiring.nets){
+    if(groupId&&net.groupId!==groupId)continue;
+    const checked=net.ends.map(ref=>inspectEndpoint(devices,ref));
+    if(net.ends.length!==2||checked.some(p=>p.status!=='ok'||p.pin?.kind==='nc')){
+      skipped.push(net.name);continue;
+    }
+    const receiverA=Boolean(checked[0].port.receiver), receiverB=Boolean(checked[1].port.receiver);
+    const [a,b]=receiverA&&!receiverB?[net.ends[1],net.ends[0]]:net.ends;
+    const keys=[portKey(a),portKey(b)];
+    if(keys[0]===keys[1]||keys.some(k=>reserved.has(k))){skipped.push(net.name);continue;}
+    const ordered=receiverA!==receiverB?keys:[...keys].sort();
+    const id=JSON.stringify([net.groupId||'',...ordered]);
+    const bucket=groups.get(id)??{groupId:net.groupId||'',items:[],a,b};
+    const pair=portKey(bucket.a)===portKey(a)?[a,b]:[b,a];
+    bucket.items.push({net,pair});groups.set(id,bucket);
+  }
+  let count=1;
+  const cables=[];
+  for(const group of groups.values()){
+    const keys=[portKey(group.a),portKey(group.b)];
+    if(keys.some(k=>reserved.has(k))){skipped.push(...group.items.map(i=>i.net.name));continue;}
+    const a=bindEndpoint(devices,group.a.deviceId,group.a.portId);
+    const b=bindEndpoint(devices,group.b.deviceId,group.b.portId);
+    let code;
+    do {code='CBL-'+String(count++).padStart(3,'0');} while(codes.has(code.toLowerCase()));
+    const wires=group.items.map(({net,pair})=>({id:uuid(),a:pair[0].pin,b:pair[1].pin,label:net.name,netId:net.id}));
+    cables.push({id:uuid(),code,name:(a.display+' → '+b.display).slice(0,120),a,b,kind:'multicore',groupId:group.groupId,wires,
+      plugA:defaultPlug(inspectEndpoint(devices,a).port),plugB:defaultPlug(inspectEndpoint(devices,b).port)});
+    keys.forEach(k=>reserved.add(k));
+  }
+  return {cables,skipped};
 }
 
 export function parsePickeringPins(raw) {
@@ -375,6 +444,7 @@ export function pickeringCsv(project,cableId,format='named') {
   assert(cable?.wires.length,'내보낼 케이블 핀맵이 비어 있습니다.');
   const issue=wiringIssues(project).find(x=>x.itemId===cable.id&&x.severity==='error');
   assert(!issue,issue?.message);
+  assert(cable.kind!=='loopback','루프백 핀맵은 배선표 XLSX에서 내보내세요.');
   assert(cable.kind!=='twisted'&&!cable.wires.some(w=>w.pair),'트위스트 페어는 이 CDT 단일 도체 CSV 형식으로 저장할 수 없습니다. 프로젝트 XLSX에서 페어 정보를 확인하세요.');
   const devices=indexDevices(project);
   const ports=[inspectEndpoint(devices,cable.a).port,inspectEndpoint(devices,cable.b).port];
