@@ -2,6 +2,7 @@ name: Publish portable release
 
 on:
   workflow_dispatch:
+  create:
 
 permissions:
   contents: write
@@ -12,7 +13,7 @@ concurrency:
 
 jobs:
   publish:
-    if: github.ref == 'refs/heads/main'
+    if: (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') || (github.event_name == 'create' && github.ref_type == 'branch' && startsWith(github.ref, 'refs/heads/release/v'))
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
@@ -48,6 +49,10 @@ jobs:
           version=$(node -p 'require("./package.json").version')
           [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
           tag="v$version"
+          if [[ "$GITHUB_REF_NAME" == release/* && "$GITHUB_REF_NAME" != "release/$tag" ]]; then
+            echo "Release branch must be named release/$tag" >&2
+            exit 1
+          fi
           output="$RUNNER_TEMP/release"
           bash tools/package.sh "$RUNNER_TEMP/electron" "$output"
           cd "$output"
