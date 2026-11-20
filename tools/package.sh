@@ -42,6 +42,7 @@ for studio_platform in win32 linux; do
   else
     mv "$studio_dir/electron" "$studio_dir/ate-studio-bin"
     install -m 0755 "$studio_root/tools/Linux-launcher.sh" "$studio_dir/ate-studio"
+    bash "$studio_root/tools/collect-linux-libs.sh" "$studio_dir/ate-studio-bin" "$studio_dir"
     tar -C "$studio_stage" -czf "$studio_out/ATE_Studio_v${studio_version}_Linux_x64.tar.gz" ATE_Studio
   fi
 done

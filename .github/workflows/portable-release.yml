@@ -22,7 +22,10 @@ jobs:
         with:
           node-version: '24'
       - name: Install build dependencies
-        run: npm ci
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libgtk-3-0 libnss3 libasound2 libgbm1 libatomic1 libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libcups2
+          npm ci
       - name: Validate and build
         run: |
           npm run typecheck
@@ -51,6 +54,12 @@ jobs:
           win="ATE_Studio_v${version}_Windows_x64.zip"
           linux="ATE_Studio_v${version}_Linux_x64.tar.gz"
           checks="ATE_Studio_v${version}_SHA256SUMS.txt"
+          unzip -tq "$win"
+          check_dir="$(mktemp -d)"
+          tar -xzf "$linux" -C "$check_dir"
+          "$check_dir/ATE_Studio/ate-studio" --check
+          test -s "$check_dir/ATE_Studio/linux-libs/libgtk-3.so.0"
+          test -s "$check_dir/ATE_Studio/LINUX-LIBRARIES.tsv"
           sha256sum "$win" "$linux" > "$checks"
           gh release create "$tag" "$win" "$linux" "$checks" --repo "$GITHUB_REPOSITORY" \
             --target "$GITHUB_SHA" --title "ATE Studio $tag" --notes-file "$GITHUB_WORKSPACE/RELEASE_NOTES.md"

@@ -1,4 +1,4 @@
-# ATE Studio 0.5.0
+# ATE Studio 0.6.0
 
 폐쇄망에서 PXI·PXIe 장비의 배치, 신호 연결, 케이블과 리시버를 설계하는 데스크톱 앱입니다. 예제 장비와 도면에 근거한 제조사 프로파일이 포함됩니다.
 
@@ -6,10 +6,12 @@
 
 | 배포본 | 실행 방법 |
 | --- | --- |
-| Windows x64 | ZIP 전체를 로컬 폴더에 풀고 `ATE Studio.exe`를 실행 |
-| Linux x86_64 | 압축을 풀고 `./ate-studio`를 실행 |
+| Windows 10·11 x64 | ZIP 전체를 로컬 폴더에 풀고 `ATE Studio.exe`를 실행 |
+| Linux x86_64 | X11 또는 Wayland 데스크톱에서 압축을 풀고 `./ate-studio`를 실행 |
 
-Electron, React, SQLite, XLSX 작성 라이브러리와 한글 폰트를 포함합니다. 별도의 Node.js나 npm 설치가 필요하지 않습니다. Linux에서는 GTK3, NSS, GBM, ALSA 등 배포판 데스크톱 라이브러리가 필요하며 실행 스크립트가 누락을 알려 줍니다. 샌드박스는 일반 실행 시 기본 활성화 상태입니다. Windows 실행 파일은 사내 코드 서명 인증서 적용 전입니다.
+두 배포본에 Electron, Node.js 런타임, SQLite, 앱 라이브러리와 한글 폰트를 포함합니다. 실행 PC에서 Python, Node.js, npm을 설치하거나 인터넷에 연결할 필요가 없습니다. 압축을 푼 폴더 전체를 이동하면 같은 구성으로 실행할 수 있습니다. Windows 실행 파일은 사내 코드 서명 인증서 적용 전입니다.
+
+Linux는 glibc 기반의 64비트 데스크톱 환경이 필요합니다. 시스템 라이브러리로 먼저 실행하고, 필요한 라이브러리를 로드하지 못하면 동봉한 GTK·NSS·ALSA 등으로 다시 검사합니다. 동봉 라이브러리는 Ubuntu 22.04 x86_64 빌드 환경을 기준으로 합니다. `./ate-studio --check`로 GUI를 열기 전에 라이브러리 로딩을 확인할 수 있습니다. 디스플레이 세션과 OS의 glibc·그래픽 드라이버 및 샌드박스 지원은 호스트에서 제공합니다. 동봉 라이브러리 목록과 라이선스는 Linux 압축의 `LINUX-LIBRARIES.tsv`와 `third-party/linux/`에 있습니다.
 
 ## 9050 예제부터 시작
 
@@ -55,7 +57,7 @@ Electron, React, SQLite, XLSX 작성 라이브러리와 한글 폰트를 포함�
 ## 개발과 자료
 
 - Node.js 24 계열에서 `npm ci`, `npm run typecheck`, `npm test`, `npm run build`를 실행합니다. 빌드 후 `npm start`로 앱을 엽니다.
-- 두 플랫폼 패키지는 Electron 공식 ZIP과 공식 `SHASUMS256.txt`로 `tools/package.sh RUNTIME_DIR OUTPUT_DIR`에서 만듭니다.
+- 두 플랫폼 패키지는 Electron 공식 ZIP과 공식 `SHASUMS256.txt`로 `tools/package.sh RUNTIME_DIR OUTPUT_DIR`에서 만듭니다. 표준 릴리즈 워크플로는 Ubuntu 22.04 빌드 호스트의 패키지에서 Linux 호환 라이브러리를 수집합니다.
 - [VPC 9050 표준](https://www.vpc.com/catalog/310104368/) · [9050 EMI](https://www.vpc.com/catalog/310104429/) · [9050 VXI](https://www.vpc.com/catalog/310104272/)
 - [VPC 9025](https://www.vpc.com/catalog/310104114/) · [VPC 9075](https://www.vpc.com/catalog/310104307/) · [QuadraPaddle 192](https://www.vpc.com/catalog/510150115/) · [TriPaddle 96](https://www.vpc.com/catalog/510104136/)
 - [Pickering 40/42-153 매뉴얼](https://www.pickeringtest.com/portal/web/256/content/downloads/manuals/40-42-153M.pdf) Figure 5.6 · [D-Sub 37 액세서리](https://www.pickeringtest.com/portal/web/256/content/downloads/datasheets/90-007D.pdf)

@@ -4,7 +4,7 @@
 
 ## 프로젝트와 현재 범위
 
-- 기준 소스는 v0.5.0이다. Electron 데스크톱 앱에서 PXI·PXIe 섀시와 카드를 배치하고, 장비 커넥터와 VPC 리시버의 후면 접점을 연결한다. 논리 신호, 케이블 도체, 부품명세서, 배선 보고서까지 한 프로젝트에서 관리한다.
+- 기준 소스는 v0.6.0이다. Electron 데스크톱 앱에서 PXI·PXIe 섀시와 카드를 배치하고, 장비 커넥터와 VPC 리시버의 후면 접점을 연결한다. 논리 신호, 케이블 도체, 부품명세서, 배선 보고서까지 한 프로젝트에서 관리한다.
 - 배포 대상은 Windows x64와 Linux x86_64다. 배치, 저장, 출력, 카탈로그는 폐쇄망에서 동작하며 사내 LLM 연결은 선택 사항이다.
 - VPC 9050을 우선 지원한다. 9025·9075 및 사용자 정의 리시버도 같은 장착·배선 검증을 사용한다. 현재 Pickering CDT 연동 범위는 핀맵 CSV 교환이다.
 - `examples/Pickering_VPC_9050_Sample.ateproj`와 앱의 **9050 배선 예제**가 기준 재현 경로다. Pickering 카드 `42-153-104`의 `J1`과 VPC 9050 `310104368`의 `A.1`을 연결한다. 양단 간 핀쌍과 길이는 교육용 배정이다.
@@ -50,7 +50,7 @@ ATE_PROFILE="$ate_test_dir/profile" ATE_TEST_OUTPUT="$ate_test_dir/output" npm s
 | `store.mjs` | SQLite 카탈로그·설정, 프로젝트 파일 읽기, 원자적 저장, 백업, 배타 잠금 |
 | `llm.mjs` | 사내 OpenAI 호환 요청, 요청용 설계 요약, 응답 검증과 배치 명령 변환 |
 | `report.mjs`, `wiring-report.mjs` | PDF·PNG용 HTML, XLSX와 공통 배선 레코드, 신호·접점·자재 집계 |
-| `tools/package.sh`, `tools/Linux-launcher.sh` | Windows·Linux x64 오프라인 패키징, Linux 사전 실행 검사 |
+| `tools/package.sh`, `tools/collect-linux-libs.sh`, `tools/Linux-launcher.sh` | Windows·Linux x64 오프라인 패키징, Linux 호환 라이브러리 수집 및 사전 실행 검사 |
 
 ## 변경 시 보존할 동작
 
@@ -88,7 +88,7 @@ ATE_PROFILE="$ate_test_dir/profile" ATE_TEST_OUTPUT="$ate_test_dir/output" npm s
 
 ## 배포와 작업 기록
 
-- 배포본은 Vite 빌드 후 `bash tools/package.sh RUNTIME_DIR OUTPUT_DIR`로 만든다. 입력 폴더에 `package.json`과 같은 버전의 Electron Windows·Linux x64 공식 ZIP 및 `SHASUMS256.txt`를 둔다. 스크립트는 공식 체크섬을 검사하고 런타임·앱·예제·폰트 라이선스를 묶는다. 결과는 대상 OS에서 압축을 풀어 실행하고 확인한다.
+- 배포본은 Vite 빌드 후 Ubuntu 22.04 x86_64의 릴리즈 빌드 환경에서 `bash tools/package.sh RUNTIME_DIR OUTPUT_DIR`로 만든다. 입력 폴더에 `package.json`과 같은 버전의 Electron Windows·Linux x64 공식 ZIP 및 `SHASUMS256.txt`를 둔다. 스크립트는 체크섬을 검사하고 런타임·앱·예제·폰트를 묶는다. Linux의 공유 라이브러리와 출처 정보는 `collect-linux-libs.sh`에서 수집하며, 대상에서는 호스트 로딩을 먼저 시도한다. 결과는 압축을 푼 대상 OS에서 확인한다.
 - 기능 수정 시 기준 커밋과 변경 범위를 먼저 확인하고 현재 구현을 따라간다. 정상 화면에서 재현하고 관련 테스트를 실행한다. 기존 테스트가 실패를 놓치는 경우 재현 테스트를 추가한다. 수정 후 diff로 의도한 변경 범위를 두 번, 타입·빌드 등으로 문법과 호출 경로를 두 번 확인한다.
 - 앱 코드를 변경하면 프로젝트의 버전 정책에 맞춰 마이너 버전을 한 단계 올린다. `package.json`, `package-lock.json`, `domain.mjs`의 `VERSION`, README의 표시 버전을 맞춘다. 파일 스키마는 호환성 변경이 있을 때 따로 검토한다.
 - 인수인계 기록에는 재현 절차, 수정한 파일, 실행한 테스트, 검증하지 못한 플랫폼·동작을 남긴다. `dist/`, `node_modules/`, 로컬 프로필, 임시 출력은 소스 커밋에서 제외한다.

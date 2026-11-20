@@ -1,6 +1,6 @@
 import { cleanConnectors, cleanWiring, emptyWiring, editWiring, wiringIssues, bindEndpoint, indexDevices, defaultPlug } from './wiring.mjs';
 import { cleanReceiver, cleanReceiverModule, cleanReceiverMounts } from './receiver.mjs';
-export const VERSION = '0.5.0';
+export const VERSION = '0.6.0';
 export const kinds = ['chassis', 'module', 'instrument', 'dut', 'receiver', 'receiverModule'];
 export const interfaces = ['PXI', 'PXIe', 'Hybrid', 'LXI/USB', 'Standalone'];
 export const roles = ['system', 'peripheral', 'timing', 'reserved'];
