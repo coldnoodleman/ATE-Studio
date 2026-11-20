@@ -1,0 +1,63 @@
+export type Slot = {number:number; role:string; accepts:string[]; disabled?:boolean};
+export type Definition = {
+  kind:string; vendor:string; part:string; name:string; revision:string; category:string; source:string;
+  sourceDate:string; evidence:string; standard:string; procure:boolean; image?:string;
+  slots?:Slot[]; width?:number; role?:string; hybrid?:string; widthMm?:number; heightMm?:number;
+  power?:number; heat?:number; powerLimit?:number; coolingLimit?:number;
+  connectors?:Port[]; receiver?:ReceiverProfile; receiverModule?:ModuleProfile;
+};
+export type Item = {id:string; label:string; definition:Definition; procurement:boolean;receiverMounts?:ReceiverMount[]};
+export type Card = Item & {slot:number};
+export type Chassis = Item & {placements:Card[]};
+export type Project = {
+  schema:number; id:string; name:string; revision:string; notes:string; updatedAt:string; catalogVersion?:string; chassis:Chassis[]; instruments:Item[]; wiring:Wiring;
+};
+export type FileState = {name:string; readOnly:boolean};
+export type Catalog = {catalog:Definition[]; catalogVersion:string};
+export type Settings = {enabled:boolean; baseUrl:string; model:string; proactive:boolean; routed:boolean; hasKey:boolean; secureKey:boolean};
+export type ImportPreview = {token:string; items:{mode:string; kind:string; part:string; vendor:string; revision:string; evidence:string}[]};
+export type AIReply = {answer:string; suggestions:{label:string; target:string; slot?:number; reason:string; status:string; message:string}[]; token:string|null; changes:number; model:string};
+export type Api = {
+  boot():Promise<Catalog & {settings:Settings; recovery:Project|null}>;
+  newProject(sample:boolean | "wiring"):Promise<{project:Project;file:FileState}>;
+  openProject():Promise<{project:Project;file:FileState;recovered:boolean}|null>;
+  save(project:Project,as:boolean):Promise<{file:FileState}|null>;
+  changed(project:Project):Promise<boolean>;
+  discardRecovery():Promise<void>;
+  export(project:Project,format:string,formal:boolean):Promise<{name:string}|null>;
+  saveCatalog(d:Definition):Promise<Catalog>;
+  importCatalog():Promise<ImportPreview|null>;
+  commitCatalog(token:string):Promise<Catalog>;
+  exportCatalog(format:string):Promise<{name:string}|null>;
+  saveLLM(s:Settings & {key?:string; rememberKey?:boolean; clearKey?:boolean}):Promise<Settings>;
+  models():Promise<string[]>;
+  testLLM():Promise<{model:string}>;
+  ask(project:Project,question:string,mode:string):Promise<AIReply>;
+  apply(project:Project,token:string):Promise<Project>;
+  readPinCsv():Promise<{name:string;text:string}|null>;
+  exportPinCsv(project:Project,cableId:string,format:string):Promise<{name:string}|null>;
+};
+declare global { interface Window { studio:Api; } }
+export const kindNames:Record<string,string>={chassis:'섀시',module:'모듈',instrument:'독립 계측기',dut:'DUT',receiver:'리시버',receiverModule:'리시버 모듈'};
+export const evidenceNames:Record<string,string>={verified:'자료 확인',unverified:'확인 필요',sample:'교육용'};
+export const roleNames:Record<string,string>={system:'시스템',peripheral:'일반',timing:'타이밍',reserved:'예약'};
+
+export type Pin = {id:string; label?:string; kind:string};
+export type Port = {id:string;name?:string;family:string;gender:string;part?:string;source?:string;pins:Pin[];
+  receiver?:{tier:string;position:string;model:string;module:string;itaPart:string;termination:string;contactPart:string;minAwg:number|null;maxAwg:number|null}};
+export type ReceiverTier = {id:string;label:string;mode:'discrete'|'adapter';positions:string[];families:string[];adapters?:{part:string;width:number}[];ita?:string[]};
+export type ReceiverProfile = {series:string;view:string;ita?:string[];tiers:ReceiverTier[]};
+export type ModuleProfile = {series:string;width:number;termination:string;itaPart?:string;cavityRows?:string[][];cavityView?:string;contacts:{part:string;minAwg?:number;maxAwg?:number;source?:string}[]};
+export type ReceiverMount = {tier:string;position:string;definition:Definition;contactPart?:string;adapterPart?:string;adapterStart?:string;contactOverrides?:{pin:string;part:string}[]};
+export type ReceiverMountResult = {status:'saved'} | {status:'confirm'|'error';message:string};
+export type SaveReceiverMounts = (id:string,mounts:ReceiverMount[],confirmed?:boolean)=>ReceiverMountResult;
+export type Endpoint = {deviceId:string;portId:string;fingerprint:string;display:string;pin?:string};
+export type Plug = {family?:string;part?:string;gender?:string;termination?:string;backshell?:string};
+export type Wire = {id:string;a:string;b:string;label?:string; aLabel?:string; bLabel?:string; color?:string;awg?:number;pair?:string;note?:string;netId?:string};
+export type Cable = {id?:string;code:string;name?:string;groupId?:string;a:Endpoint;b:Endpoint;plugA:Plug;plugB:Plug;bundle?:string;
+  kind:string;lengthMm?:number;measurement?:string;awg?:number;shield?:string;sleeve?:string;cablePart?:string;note?:string;wires:Wire[]};
+export type WiringGroup = {id?:string;name:string;note?:string;members:string[]};
+export type Net = {id?:string;name:string;note?:string;groupId?:string;ends:Endpoint[]};
+export type WiringRevision = {id?:string;name:string;at:string;note:string;cableCount:number;netCount:number};
+export type Wiring = {groups:WiringGroup[];nets:Net[];cables:Cable[];revisions:WiringRevision[]};
+export type Device = Item & {location:string};

@@ -1,0 +1,455 @@
+{
+  "schema": 2,
+  "wiring": {
+    "groups": [],
+    "nets": [],
+    "cables": [],
+    "revisions": []
+  },
+  "id": "1cf6aa7d-0267-479b-86de-f5f0d5ff56fd",
+  "name": "ATE 스위칭 구성 예제",
+  "revision": "A",
+  "notes": "교육용 배치입니다. 모델별 호환 조건과 검증 상태를 확인하세요.",
+  "catalogVersion": "내장 교육용 예제",
+  "updatedAt": "2026-11-20T06:39:45.137Z",
+  "chassis": [
+    {
+      "id": "a14881cd-dfba-40c1-a362-584fb65a1361",
+      "label": "CH-01",
+      "definition": {
+        "kind": "chassis",
+        "vendor": "ATE Studio 예제",
+        "part": "DEMO-PXIE-08",
+        "name": "8슬롯 하이브리드 실습 섀시",
+        "revision": "1",
+        "category": "섀시",
+        "source": "교육용 가상 품목",
+        "sourceDate": "",
+        "evidence": "sample",
+        "standard": "Hybrid",
+        "procure": true,
+        "image": "",
+        "slots": [
+          {
+            "number": 1,
+            "role": "system",
+            "accepts": [
+              "PXIe"
+            ],
+            "disabled": false
+          },
+          {
+            "number": 2,
+            "role": "peripheral",
+            "accepts": [
+              "Hybrid"
+            ],
+            "disabled": false
+          },
+          {
+            "number": 3,
+            "role": "peripheral",
+            "accepts": [
+              "Hybrid"
+            ],
+            "disabled": false
+          },
+          {
+            "number": 4,
+            "role": "peripheral",
+            "accepts": [
+              "Hybrid"
+            ],
+            "disabled": false
+          },
+          {
+            "number": 5,
+            "role": "peripheral",
+            "accepts": [
+              "Hybrid"
+            ],
+            "disabled": false
+          },
+          {
+            "number": 6,
+            "role": "peripheral",
+            "accepts": [
+              "Hybrid"
+            ],
+            "disabled": false
+          },
+          {
+            "number": 7,
+            "role": "peripheral",
+            "accepts": [
+              "Hybrid"
+            ],
+            "disabled": false
+          },
+          {
+            "number": 8,
+            "role": "peripheral",
+            "accepts": [
+              "Hybrid"
+            ],
+            "disabled": false
+          }
+        ],
+        "powerLimit": 220,
+        "coolingLimit": 30
+      },
+      "procurement": true,
+      "placements": [
+        {
+          "id": "1fa5ddcd-aad4-4007-880f-4103b074513d",
+          "label": "",
+          "definition": {
+            "kind": "module",
+            "vendor": "ATE Studio 예제",
+            "part": "DEMO-CTRL",
+            "name": "임베디드 제어기",
+            "revision": "1",
+            "category": "제어기",
+            "source": "교육용 가상 품목",
+            "sourceDate": "",
+            "evidence": "sample",
+            "standard": "PXIe",
+            "procure": true,
+            "image": "",
+            "width": 1,
+            "role": "system",
+            "hybrid": "unknown",
+            "power": 30,
+            "heat": 30
+          },
+          "procurement": true,
+          "slot": 1
+        },
+        {
+          "id": "59245c5f-c433-4928-9315-e8b234e27007",
+          "label": "",
+          "definition": {
+            "kind": "module",
+            "vendor": "ATE Studio 예제",
+            "part": "DEMO-MUX",
+            "name": "16채널 2선 멀티플렉서",
+            "revision": "1",
+            "category": "멀티플렉서",
+            "source": "교육용 가상 품목",
+            "sourceDate": "",
+            "evidence": "sample",
+            "standard": "PXIe",
+            "procure": true,
+            "image": "",
+            "width": 1,
+            "role": "peripheral",
+            "hybrid": "unknown",
+            "power": 9,
+            "heat": 9,
+            "connectors": [
+              {
+                "id": "J1",
+                "name": "예제 배선 포트",
+                "family": "D-Sub 9",
+                "gender": "female",
+                "part": "",
+                "source": "교육용 가상 핀맵 · 실제 장비 금지",
+                "pins": [
+                  {
+                    "id": "1",
+                    "label": "CH0+",
+                    "kind": "passive"
+                  },
+                  {
+                    "id": "2",
+                    "label": "CH0-",
+                    "kind": "passive"
+                  },
+                  {
+                    "id": "3",
+                    "label": "CH1+",
+                    "kind": "passive"
+                  },
+                  {
+                    "id": "4",
+                    "label": "CH1-",
+                    "kind": "passive"
+                  },
+                  {
+                    "id": "5",
+                    "label": "CH2+",
+                    "kind": "passive"
+                  },
+                  {
+                    "id": "6",
+                    "label": "CH2-",
+                    "kind": "passive"
+                  },
+                  {
+                    "id": "7",
+                    "label": "CH3+",
+                    "kind": "passive"
+                  },
+                  {
+                    "id": "8",
+                    "label": "CH3-",
+                    "kind": "passive"
+                  },
+                  {
+                    "id": "9",
+                    "label": "SHIELD",
+                    "kind": "passive"
+                  }
+                ]
+              }
+            ]
+          },
+          "procurement": true,
+          "slot": 2
+        },
+        {
+          "id": "d6e605d7-331c-4fa3-9f22-f0ac719653d4",
+          "label": "",
+          "definition": {
+            "kind": "module",
+            "vendor": "ATE Studio 예제",
+            "part": "DEMO-MUX",
+            "name": "16채널 2선 멀티플렉서",
+            "revision": "1",
+            "category": "멀티플렉서",
+            "source": "교육용 가상 품목",
+            "sourceDate": "",
+            "evidence": "sample",
+            "standard": "PXIe",
+            "procure": true,
+            "image": "",
+            "width": 1,
+            "role": "peripheral",
+            "hybrid": "unknown",
+            "power": 9,
+            "heat": 9,
+            "connectors": [
+              {
+                "id": "J1",
+                "name": "예제 배선 포트",
+                "family": "D-Sub 9",
+                "gender": "female",
+                "part": "",
+                "source": "교육용 가상 핀맵 · 실제 장비 금지",
+                "pins": [
+                  {
+                    "id": "1",
+                    "label": "CH0+",
+                    "kind": "passive"
+                  },
+                  {
+                    "id": "2",
+                    "label": "CH0-",
+                    "kind": "passive"
+                  },
+                  {
+                    "id": "3",
+                    "label": "CH1+",
+                    "kind": "passive"
+                  },
+                  {
+                    "id": "4",
+                    "label": "CH1-",
+                    "kind": "passive"
+                  },
+                  {
+                    "id": "5",
+                    "label": "CH2+",
+                    "kind": "passive"
+                  },
+                  {
+                    "id": "6",
+                    "label": "CH2-",
+                    "kind": "passive"
+                  },
+                  {
+                    "id": "7",
+                    "label": "CH3+",
+                    "kind": "passive"
+                  },
+                  {
+                    "id": "8",
+                    "label": "CH3-",
+                    "kind": "passive"
+                  },
+                  {
+                    "id": "9",
+                    "label": "SHIELD",
+                    "kind": "passive"
+                  }
+                ]
+              }
+            ]
+          },
+          "procurement": true,
+          "slot": 3
+        },
+        {
+          "id": "355d65fd-78d9-4cd3-a42c-d5a3c508bde7",
+          "label": "",
+          "definition": {
+            "kind": "module",
+            "vendor": "ATE Studio 예제",
+            "part": "DEMO-DMM",
+            "name": "6½ 디지트 디지털 멀티미터 카드",
+            "revision": "1",
+            "category": "계측",
+            "source": "교육용 가상 품목",
+            "sourceDate": "",
+            "evidence": "sample",
+            "standard": "PXIe",
+            "procure": true,
+            "image": "",
+            "width": 1,
+            "role": "peripheral",
+            "hybrid": "unknown",
+            "power": 14,
+            "heat": 14,
+            "connectors": [
+              {
+                "id": "J1",
+                "name": "예제 배선 포트",
+                "family": "D-Sub 9",
+                "gender": "female",
+                "part": "",
+                "source": "교육용 가상 핀맵 · 실제 장비 금지",
+                "pins": [
+                  {
+                    "id": "1",
+                    "label": "HI",
+                    "kind": "passive"
+                  },
+                  {
+                    "id": "2",
+                    "label": "LO",
+                    "kind": "passive"
+                  },
+                  {
+                    "id": "3",
+                    "label": "SENSE HI",
+                    "kind": "passive"
+                  },
+                  {
+                    "id": "4",
+                    "label": "SENSE LO",
+                    "kind": "passive"
+                  },
+                  {
+                    "id": "5",
+                    "label": "GUARD",
+                    "kind": "passive"
+                  },
+                  {
+                    "id": "6",
+                    "label": "NC6",
+                    "kind": "passive"
+                  },
+                  {
+                    "id": "7",
+                    "label": "NC7",
+                    "kind": "passive"
+                  },
+                  {
+                    "id": "8",
+                    "label": "NC8",
+                    "kind": "passive"
+                  },
+                  {
+                    "id": "9",
+                    "label": "SHIELD",
+                    "kind": "passive"
+                  }
+                ]
+              }
+            ]
+          },
+          "procurement": true,
+          "slot": 5
+        }
+      ]
+    }
+  ],
+  "instruments": [
+    {
+      "id": "718d5088-5114-44ab-bfff-fd02f44a0e28",
+      "label": "DUT-01",
+      "definition": {
+        "kind": "dut",
+        "vendor": "ATE Studio 예제",
+        "part": "DEMO-DUT",
+        "name": "시험 대상 장치 예시",
+        "revision": "1",
+        "category": "DUT",
+        "source": "교육용 가상 품목",
+        "sourceDate": "",
+        "evidence": "sample",
+        "standard": "Standalone",
+        "procure": false,
+        "image": "",
+        "connectors": [
+          {
+            "id": "J1",
+            "name": "예제 배선 포트",
+            "family": "D-Sub 9",
+            "gender": "female",
+            "part": "",
+            "source": "교육용 가상 핀맵 · 실제 장비 금지",
+            "pins": [
+              {
+                "id": "1",
+                "label": "IN0",
+                "kind": "passive"
+              },
+              {
+                "id": "2",
+                "label": "IN1",
+                "kind": "passive"
+              },
+              {
+                "id": "3",
+                "label": "IN2",
+                "kind": "passive"
+              },
+              {
+                "id": "4",
+                "label": "IN3",
+                "kind": "passive"
+              },
+              {
+                "id": "5",
+                "label": "IN4",
+                "kind": "passive"
+              },
+              {
+                "id": "6",
+                "label": "IN5",
+                "kind": "passive"
+              },
+              {
+                "id": "7",
+                "label": "IN6",
+                "kind": "passive"
+              },
+              {
+                "id": "8",
+                "label": "IN7",
+                "kind": "passive"
+              },
+              {
+                "id": "9",
+                "label": "GND",
+                "kind": "passive"
+              }
+            ]
+          }
+        ]
+      },
+      "procurement": false
+    }
+  ]
+}
