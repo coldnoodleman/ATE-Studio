@@ -1,0 +1,56 @@
+name: Publish portable release
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: portable-release
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install build dependencies
+        run: npm ci
+      - name: Validate and build
+        run: |
+          npm run typecheck
+          npm test
+          npm run build
+      - name: Download Electron distributions
+        run: |
+          set -euo pipefail
+          electron_version=$(node -p 'require("./package.json").devDependencies.electron')
+          mkdir -p "$RUNNER_TEMP/electron"
+          base="https://github.com/electron/electron/releases/download/v$electron_version"
+          for file in SHASUMS256.txt "electron-v$electron_version-win32-x64.zip" "electron-v$electron_version-linux-x64.zip"; do
+            curl --fail --location --retry 3 --output "$RUNNER_TEMP/electron/$file" "$base/$file"
+          done
+      - name: Package and publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          version=$(node -p 'require("./package.json").version')
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          tag="v$version"
+          output="$RUNNER_TEMP/release"
+          bash tools/package.sh "$RUNNER_TEMP/electron" "$output"
+          cd "$output"
+          win="ATE_Studio_v${version}_Windows_x64.zip"
+          linux="ATE_Studio_v${version}_Linux_x64.tar.gz"
+          checks="ATE_Studio_v${version}_SHA256SUMS.txt"
+          sha256sum "$win" "$linux" > "$checks"
+          gh release create "$tag" "$win" "$linux" "$checks" --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" --title "ATE Studio $tag" --notes-file "$GITHUB_WORKSPACE/RELEASE_NOTES.md"
